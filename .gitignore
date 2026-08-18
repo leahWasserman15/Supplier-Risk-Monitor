@@ -47,3 +47,9 @@ Research/
 *.xlsx
 !real_pro_av_companies.xlsx
 ~$*.xlsx
+
+# Generated SQLite vendor book (seeded from the sample Excel on first run)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

@@ -8,10 +8,10 @@ from IPython.display import Markdown, display
 from companies import CompanyBook
 
 load_dotenv(override=True)
-risk_evalute_instructions= """
+risk_evalute_instructions = """
 You are a vendor risk analyst. You are given a factual news and filings
-summary about one vendor. Classify the risk it indicates. Do not search.
-Do not add facts not in the summary.
+summary about one vendor. Classify the risk it indicates. Do not add facts
+not in the summary.
 
 ## Scope
 Risk means: money we have committed to this vendor — prepayments, open POs,
@@ -29,7 +29,8 @@ cargo. A fire at the vendor's factory is in scope; an earthquake at a port
 they ship through is not. Sector conditions and reputational news are out
 unless they carry a direct financial or delivery consequence.
 
-If every event is out of scope, score 1 and say so.
+If the summary reports events but all of them are out of scope, score 1 and
+say so. If the summary reports no events at all, score 0.
 
 ## Scale — highest level the evidence supports
 0  No evidence available, or entity not confirmed.
@@ -41,14 +42,13 @@ If every event is out of scope, score 1 and say so.
    revolver, cost-cutting layoffs, asset sales for cash. Or: regulatory
    proceeding that could restrict import, certification under review,
    single-source shortage, ownership change announced.
-4  Distressed or delivery impaired — hold affected POs, accelerate
-   collection. Going-concern qualification, covenant breach or waiver, late
-   statutory filing, auditor resignation, restructuring advisors engaged,
-   missed interest payment, negative shareholders' equity, delisting notice
-   on financial criteria, emergency discounted equity raise. Or:
-   restricted-party listing (BIS, FCC Covered List, OFAC), UFLPA detention,
-   plant closure or fire, lost certification, confirmed shipment delays,
-   major recall.
+4  Distressed or delivery impaired. Going-concern qualification, covenant
+   breach or waiver, late statutory filing, auditor resignation,
+   restructuring advisors engaged, missed interest payment, negative
+   shareholders' equity, delisting notice on financial criteria, emergency
+   discounted equity raise. Or: restricted-party listing (BIS, FCC Covered
+   List, OFAC), UFLPA detention, plant closure or fire, lost certification,
+   confirmed shipment delays, major recall.
 5  Failed or stopped. Insolvency proceeding under any regime (Chapter 7/11,
    UK administration or CVA, German Insolvenzverfahren, French redressement
    or liquidation judiciaire, Japanese civil rehabilitation), receivership,
@@ -61,24 +61,21 @@ If every event is out of scope, score 1 and say so.
   indicators score 5. Otherwise take the highest single level. Never average.
 - Restrictions applying only to NEW models, where previously authorized
   goods may still be sold, score 4 not 5. Name the affected models and say
-  whether existing inventory is exempt — this decides full hold vs.
-  forward-buy hold.
+  whether existing inventory is exempt.
 - Filings, exchange notices, court registers, restricted-party lists, rating
   actions, and the company's own statements about its condition are primary;
   score at face value. A single press source alleging a level-4 or 5
   condition caps at 3 pending confirmation.
 - Nothing found scores 0, not 1 — an unwatched vendor must not look clean.
-  Set data_gap "Y" where the vendor is private or files in a jurisdiction
-  the summary did not cover.
 - Score only what the summary states. Judge the condition, not the tone.
-  Do not weight by how much we buy — that happens downstream.
+  Do not weight by how much we buy.
 - A refinancing that resolves a prior breach lowers the score. One that
   leaves a going-concern warning in place does not.
 - The reason must state what happened, what it affects, and any carve-out.
   Name any event you excluded as out of scope and why.
-
-Set risk_flag "Y" for 3 and above, "N" for 0-2.
 """
+
+RISK_FLAG_THRESHOLD = 3
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
@@ -87,11 +84,26 @@ class Risk_Decision(BaseModel):
         description="One or two sentences naming the driving event and why it scores at that level. Must reference something stated in the summary."
     )
     Risk_level: int = Field(
-        description="1 routine business activity. 2 indirect or early-stage. 3 material but unresolved. 4 confirmed and directly affecting supply. 5 supply is unlawful or has stopped. Use 0 when the summary reports no findings or an unconfirmed entity."
+        ge=0,
+        le=5,
+        description=(
+            "0 no evidence available, or entity not confirmed. "
+            "1 no signal, routine operations. "
+            "2 early — sector downturn, revenue decline without liquidity strain. "
+            "3 deteriorating — sustained losses, covenant pressure, regulatory "
+            "proceeding, ownership change announced. "
+            "4 distressed or delivery impaired — going-concern qualification, "
+            "covenant breach, restricted-party listing, plant closure, lost "
+            "certification. "
+            "5 failed or stopped — insolvency proceeding, payment default, "
+            "ceased trading, import/export ban with no carve-out. "
+            "Take the highest level the evidence supports; never average."
+        ),
     )
-    is_risk: bool = Field(
-        description="True if the summary indicates a risk to this supplier's ability to keep supplying goods lawfully and on time (risk level 3 or above). False otherwise."
-    )
+    @property
+    def is_risk(self) -> bool:
+        """True when the level is at or above the flag threshold."""
+        return self.Risk_level >= RISK_FLAG_THRESHOLD
     
 model = "gpt-5.6-terra"
 search_only = create_static_tool_filter(allowed_tool_names=["tavily_search"])

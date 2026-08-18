@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from pathlib import Path
 from typing import Any
 
 import gradio as gr
@@ -11,7 +10,6 @@ import pandas as pd
 
 from companies import CompanyBook
 
-WORKBOOK_PATH = Path(__file__).resolve().with_name("real_pro_av_companies.xlsx")
 DEFAULT_BATCH_SIZE = 100
 
 DISPLAY_COLS = [
@@ -83,8 +81,8 @@ HERO_HTML = """
 
 
 def load_company_book() -> CompanyBook:
-    """Load the supplier data from the project's Excel workbook."""
-    return CompanyBook(path=WORKBOOK_PATH)
+    """Load the supplier data from SQLite, seeding from Excel on first run."""
+    return CompanyBook()
 
 
 def load_vendor_table(flagged_only: bool = False) -> pd.DataFrame:

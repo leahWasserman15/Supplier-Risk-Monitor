@@ -1,8 +1,8 @@
 # Supplier Risk Monitor
 
-Procurement teams have hundreds of vendors and no idea which ones are about to fail, get sanctioned, or blow up a shipment.
+Procurement teams have hundreds of vendors and no idea which ones are about to fail, get sanctioned, or stop shipping.
 
-Agents watch each supplier for lawsuits, liens, enforcement actions, layoffs, port and weather disruption, and news. They maintain a live risk score and alert when something changes.
+A research agent gathers recent public news on the oldest-checked suppliers. A second agent scores supply risk from that summary only. Scores and flags write to a local SQLite vendor book.
 
 **A single supplier failure costs more than this system costs for a decade.**
 
@@ -10,26 +10,38 @@ Everything feeds from public sources.
 
 ## Setup
 
-Copy `.env.example` to `.env` and add `OPENAI_API_KEY` plus either `EXA_API_KEY` or `TAVILY_API_KEY`. Set `SEARCH_TYPE` to `EXA` or `TAVILY`.
+Python 3.12. Copy `.env.example` to `.env` and add `OPENAI_API_KEY` plus either `EXA_API_KEY` or `TAVILY_API_KEY`. Set `SEARCH_TYPE` to `EXA` or `TAVILY` (defaults to Tavily if unset). Search runs through an MCP server via `npx`, so Node.js is required.
 
-`real_pro_av_companies.xlsx` is the sample vendor book. Research files land in `Research/` and stay local.
+```bash
+uv sync
+uv run python app.py
+```
+
+Use the project environment (`uv run` or `.venv`), not a global Python. The OpenAI Agents SDK lives in `.venv`.
+
+`real_pro_av_companies.xlsx` is the sample vendor book. On first run it is copied into `suppliers.db`, converting Excel `is_risk` 1/0 values to flags. After that, reads and writes go to the database, not the spreadsheet. Delete `suppliers.db` to rebuild from Excel.
+
+Research files land in `Research/` and stay local. The database and research output are gitignored.
 
 ## Run the UI
 
 ```bash
-python app.py
+uv run python app.py
 ```
 
-Opens a Gradio app to preview the oldest-checked vendor queue, run research + risk evaluation, and browse the company book.
+Opens a Gradio app with two tabs:
 
-The monitor picks vendors with the oldest last-checked date, gathers recent public news, then scores supply risk from 0–5 (flag at 3+). Scores write back to the workbook.
+- **Run monitor** — preview the oldest-checked queue, then run research + risk evaluation
+- **Vendor book** — browse suppliers; optionally show flagged risks only
+
+The monitor picks vendors with the oldest last-checked date, gathers recent public news (default window 90 days), then scores supply risk from 0–5 (flagged at 3+). Transit, weather, and port events are out of scope; vendor finances, facilities, legal standing, and ability to deliver are in scope.
 
 ## Files
 
 - `app.py` — Gradio frontend; runs a batch of research + eval
 - `Research_Agent.py` — searches the web and writes a factual news summary
 - `Evaluate_Agent.py` — classifies risk from that summary only (no extra search)
-- `companies.py` — reads/writes `real_pro_av_companies.xlsx`
+- `companies.py` — SQLite vendor book; seeds from Excel on first run
 - `Research_Utils.py` — saves markdown under `Research/<vendor>/`
 - `frontend_utils.py` — UI layout, theme, and vendor table
 - `notebook.ipynb` — same pipeline, cell by cell
