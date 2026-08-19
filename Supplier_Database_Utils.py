@@ -7,10 +7,17 @@ import pandas as pd
 DEFAULT_DB_PATH = Path(__file__).resolve().with_name("suppliers.db")
 DEFAULT_EXCEL_PATH = Path(__file__).resolve().with_name("real_pro_av_companies.xlsx")
 TABLE = "vendors"
+CHANGES_TABLE = "vendor_changes"
+CHANGES_TRIGGER = "vendors_audit_update"
+VENDOR_COL = "Company / Brand"
 
 
 def _quote(name: str) -> str:
     return '"' + str(name).replace('"', '""') + '"'
+
+
+def _sql_literal(value: str) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
 
 
 def _parse_bool(value):
@@ -63,6 +70,7 @@ class CompanyBook:
         self.excel_path = Path(excel_path)
         if not self.path.exists():
             self._seed_from_excel()
+        self._ensure_change_log()
         self._reload()
 
     @contextmanager
@@ -97,6 +105,53 @@ class CompanyBook:
                 records,
             )
 
+    def _ensure_change_log(self):
+        with self._connect() as conn:
+            conn.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {CHANGES_TABLE} (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    changed_at TEXT NOT NULL,
+                    vendor TEXT NOT NULL,
+                    field TEXT NOT NULL,
+                    old_value TEXT,
+                    new_value TEXT
+                )
+                """
+            )
+            conn.execute(
+                f"""
+                CREATE INDEX IF NOT EXISTS vendor_changes_vendor_changed_at
+                ON {CHANGES_TABLE} (vendor, changed_at)
+                """
+            )
+            columns = [row[1] for row in conn.execute(f"PRAGMA table_info({TABLE})")]
+            if not columns:
+                return
+            vendor_col = VENDOR_COL if VENDOR_COL in columns else columns[0]
+            inserts = []
+            for col in columns:
+                qcol = _quote(col)
+                inserts.append(
+                    f"""
+                    INSERT INTO {CHANGES_TABLE}
+                        (changed_at, vendor, field, old_value, new_value)
+                    SELECT datetime('now', 'localtime'), NEW.{_quote(vendor_col)},
+                           {_sql_literal(col)}, OLD.{qcol}, NEW.{qcol}
+                    WHERE OLD.{qcol} IS NOT NEW.{qcol};
+                    """
+                )
+            conn.execute(f"DROP TRIGGER IF EXISTS {CHANGES_TRIGGER}")
+            conn.execute(
+                f"""
+                CREATE TRIGGER {CHANGES_TRIGGER}
+                AFTER UPDATE ON {TABLE}
+                BEGIN
+                {''.join(inserts)}
+                END
+                """
+            )
+
     def _read_db(self):
         with self._connect() as conn:
             return pd.read_sql_query(f"SELECT * FROM {TABLE}", conn)
@@ -128,6 +183,47 @@ class CompanyBook:
                 (int(run_count),),
             ).fetchall()
         return [row[0] for row in rows]
+
+    def get_risk_changes(self, since: str):
+        """Return latest is_risk change per vendor since `since` (YYYY-MM-DD HH:MM:SS).
+
+        If a vendor flipped more than once in the window, only the most recent
+        transition is returned so notify reports one outcome per vendor per run.
+        """
+        with self._connect() as conn:
+            changes = pd.read_sql_query(
+                f"""
+                SELECT *
+                FROM {CHANGES_TABLE}
+                WHERE field = 'is_risk'
+                  AND changed_at >= ?
+                  AND NOT (
+                      (old_value IS NULL OR old_value <> 1)
+                      AND (new_value IS NULL OR new_value <> 1)
+                  )
+                ORDER BY id DESC
+                """,
+                conn,
+                params=[since],
+            )
+        if changes.empty:
+            return changes
+        return (
+            changes.sort_values("id", ascending=False)
+            .drop_duplicates(subset="vendor", keep="first")
+            .reset_index(drop=True)
+        )
+
+    def get_vendor_changes(self, vendor=None):
+        query = f"SELECT * FROM {CHANGES_TABLE} ORDER BY id DESC"
+        params = []
+        if vendor is not None:
+            query = (
+                f"SELECT * FROM {CHANGES_TABLE} WHERE vendor = ? ORDER BY id DESC"
+            )
+            params = [vendor]
+        with self._connect() as conn:
+            return pd.read_sql_query(query, conn, params=params)
 
     def update_research_date(self, vendor):
         now = pd.Timestamp.now().floor("s")

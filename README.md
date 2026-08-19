@@ -41,8 +41,8 @@ The monitor picks vendors with the oldest last-checked date, gathers recent publ
 - `app.py` — Gradio frontend; runs a batch of research + eval
 - `Research_Agent.py` — searches the web and writes a factual news summary
 - `Evaluate_Agent.py` — classifies risk from that summary only (no extra search)
-- `companies.py` — SQLite vendor book; seeds from Excel on first run
+- `Supplier_Database_Utils.py` — SQLite vendor book; seeds from Excel on first run
 - `Research_Utils.py` — saves markdown under `Research/<vendor>/`
-- `frontend_utils.py` — UI layout, theme, and vendor table
+- `Frontend_Utiles.py` — UI layout, theme, and vendor table
 - `notebook.ipynb` — same pipeline, cell by cell
 - `.env.example` — required API keys and `SEARCH_TYPE`

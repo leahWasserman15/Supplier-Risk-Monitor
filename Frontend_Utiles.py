@@ -8,7 +8,7 @@ from typing import Any
 import gradio as gr
 import pandas as pd
 
-from companies import CompanyBook
+from Supplier_Database_Utils import CompanyBook
 
 DEFAULT_BATCH_SIZE = 100
 
@@ -111,6 +111,26 @@ def preview_batch(batch_size: int) -> str:
     return "\n".join(lines)
 
 
+def format_run_status(
+    *,
+    step: str,
+    vendor: str = "",
+    index: int = 0,
+    total: int = 0,
+    fraction: float = 0.0,
+) -> str:
+    """Render a single batch status panel with progress bar and current step."""
+    pct = max(0.0, min(1.0, fraction))
+    filled = round(pct * 24)
+    bar = "█" * filled + "░" * (24 - filled)
+    if total:
+        header = f"**Progress:** {index}/{total} vendors ({pct:.0%})"
+    else:
+        header = "**Progress:** starting…"
+    vendor_line = f"\n\n**Vendor:** {vendor}" if vendor else ""
+    return f"{header}\n\n`{bar}`\n\n**Step:** {step}{vendor_line}"
+
+
 def build_theme() -> gr.themes.Base:
     return gr.themes.Base(
         primary_hue=gr.themes.Color(
@@ -168,6 +188,7 @@ def build_ui(
                     gr.Column(scale=3)
 
                 queue_md = gr.Markdown(value=preview_batch(default_batch_size))
+                run_status = gr.Markdown(value="_Ready to run._")
                 run_log = gr.Markdown(label="Run log", value="_Idle._")
                 run_results = gr.Dataframe(
                     label="This run",
@@ -202,7 +223,8 @@ def build_ui(
         run_btn.click(
             fn=run_monitor,
             inputs=[batch_size],
-            outputs=[run_log, run_results, vendor_table],
+            outputs=[run_status, run_log, run_results, vendor_table],
+            show_progress="hidden",
         )
         refresh_btn.click(
             fn=load_vendor_table, inputs=[flagged_only], outputs=[vendor_table]

@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 from IPython.display import Markdown, display
-from companies import CompanyBook
+from Supplier_Database_Utils import CompanyBook
 
 load_dotenv(override=True)
 risk_evalute_instructions = """
