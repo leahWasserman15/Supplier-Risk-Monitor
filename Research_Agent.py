@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime
 from IPython.display import Markdown, display
 from Supplier_Database_Utils import CompanyBook
+import llm_config  # noqa: F401 — configures LiteLLM when USE_LITELLM=True
 
 load_dotenv(override=True)
 

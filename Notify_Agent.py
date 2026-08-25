@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from Notify_Utils import build_changes
 from Supplier_Database_Utils import CompanyBook
+import llm_config  # noqa: F401 — configures LiteLLM when USE_LITELLM=True
 
 load_dotenv(override=True)
 

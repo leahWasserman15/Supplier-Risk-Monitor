@@ -12,9 +12,15 @@ Everything feeds from public sources.
 
 Python 3.12. Copy `.env.example` to `.env` and add:
 
-- `OPENAI_API_KEY`
+- `OPENAI_API_KEY` (required when calling OpenAI directly)
 - Either `EXA_API_KEY` or `TAVILY_API_KEY`, plus `SEARCH_TYPE=EXA` or `SEARCH_TYPE=TAVILY` (defaults to Tavily if unset)
 - Email settings for alerts: `EMAIL_ADDRESS`, `EMAIL_SMTP_SERVER`, `EMAIL_APP_PASSWORD` (optional `EMAIL_SMTP_PORT`, default `587`)
+
+Optional LiteLLM routing (see below):
+
+- `USE_LITELLM=True` to send Agents SDK calls through a LiteLLM proxy
+- `LITELLM_API_KEY` (or `litellm`) — proxy virtual/master key
+- `LITELLM_BASE_URL` — defaults to `http://localhost:4000`
 
 Search runs through an MCP server via `npx`, so Node.js is required.
 
@@ -30,6 +36,14 @@ Use the project environment (`uv run` or `.venv`), not a global Python. The Open
 `real_pro_av_companies.xlsx` is the sample vendor book. On first run it is copied into `suppliers.db`, converting Excel `is_risk` 1/0 values to flags. After that, reads and writes go to the database, not the spreadsheet. Delete `suppliers.db` to rebuild from Excel.
 
 Research files land in `Research/` and stay local. The database and research output are gitignored.
+
+## LiteLLM
+
+Set `USE_LITELLM=True` to route research, evaluate, and notify agents through a LiteLLM proxy instead of OpenAI directly. `llm_config.py` runs on agent import and switches the Agents SDK client to `LITELLM_BASE_URL` with chat completions.
+
+If LangSmith (or similar) logging is configured on the LiteLLM proxy, you do not need a second LangSmith enable in this app — proxy-side logging covers the LLM calls.
+
+When `USE_LITELLM` is false or unset, agents use OpenAI with `OPENAI_API_KEY` as usual.
 
 ## Run the UI
 
@@ -58,6 +72,7 @@ The same flow is available in `notebook.ipynb` via `notify_from_run_start(run_st
 ## Files
 
 - `app.py` — Gradio frontend; runs a batch of research + eval + notify
+- `llm_config.py` — optional LiteLLM proxy wiring for the Agents SDK
 - `Research_Agent.py` — searches the web and writes a factual news summary
 - `Evaluate_Agent.py` — classifies risk from that summary only (no extra search)
 - `Notify_Agent.py` — formats risk-change alerts and sends email
@@ -66,4 +81,4 @@ The same flow is available in `notebook.ipynb` via `notify_from_run_start(run_st
 - `Research_Utils.py` — saves markdown under `Research/<vendor>/`
 - `Frontend_Utiles.py` — UI layout, theme, vendor table, and run status panel
 - `notebook.ipynb` — same pipeline, cell by cell
-- `.env.example` — required API keys, search provider, and email settings
+- `.env.example` — API keys, search provider, LiteLLM, and email settings
